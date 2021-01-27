@@ -1,0 +1,292 @@
+/**
+ * Wikipeg grammar for reading WebIDL
+ * 2021-01-27 C. Scott Ananian <cananian@wikimedia.org>
+ */
+{
+/* File-scope initializer */
+namespace Wikimedia\WebIDL;
+}
+{
+	/** @var string */
+	private $filename = '';
+	/** @var int */
+	private $lineNum = 1;
+
+	/**
+	 * @param string $filename
+	 * @param string $contents
+	 * @return array
+	 */
+	public static function load( string $filename, string $contents ) {
+		$g = new Grammar();
+		$g->filename = $filename;
+		return $g->parse( $contents );
+	}
+}
+
+start = Definitions
+
+/* Line number bookkeeping.
+ * Be careful about backtracking after you successfully match this production.
+ */
+eol = nl:("\n" / "\r\n" / "\r") { $this->lineNum++; return $nl; }
+
+integer = m:opt_minus n:( decimal_integer / hex_integer / octal_integer ) {
+	return m*n;
+}
+
+opt_minus = "-" { return -1; } / "" { return 1; }
+
+decimal_integer = s:$( [1-9] [0-9]* ) { return intval($s); }
+
+hex_integer = ("0x" / "0X" ) s:$( [0-9A-Fa-f]+ ) { return hexdec($s); }
+
+octal_integer = s:$( "0" [0-7]* ) { return octdec( $s ); }
+
+float = s:$( m:opt_minus (
+	( [0-9]+ "." [0-9]* / [0-9]* "." [0-9]+ ) ( [Ee] [+-]? [0-9]+ )? /
+	[0-9]+ [Ee] [+-]? [0-9]+
+) ) { return floatval( $s ); }
+
+identifier = s:$( "_"? [A-Za-z] [-_0-9A-Za-z]* ) { return $s; }
+
+string = "\"" s:$([^\"]*) "\"" { return $s; }
+
+whitespace = ( [\t ] / eol )+
+
+comment = "//" [^\n\r]* / "/*" ( [^\n\r*]+ / eol / "*" !"/" )* "*/"
+
+otherchar = [^\t\n\r 0-9A-Za-z]
+		   
+Definitions = (ExtendedAttributeList Definition)*
+
+Definition =
+		   CallbackOrInterface
+		   / Partial
+		   / Dictionary
+		   / Enum
+		   / Typedef
+		   / ImplementsStatement
+
+CallbackOrInterface = "callback" CallbackRestOrInterface / Interface
+CallbackRestOrInterface = CallbackRest / Interface
+Interface = "interface" identifier Inheritance "{" InterfaceMembers "}" ";"
+Partial = "partial" PartialDefinition
+PartialDefinition = PartialInterface / PartialDictionary
+PartialInterface = "interface" identifier "{" InterfaceMembers "}" ";"
+InterfaceMembers = ( ExtendedAttributeList InterfaceMember )*
+InterfaceMember = Const
+		   / Operation
+		   / Serializer
+		   / Stringifier
+		   / StaticMember
+		   / Iterable
+		   / ReadOnlyMember
+		   / ReadWriteAttribute
+Dictionary = "dictionary" identifier Inheritance "{" DictionaryMembers "}" ";"
+DictionaryMembers = (ExtendedAttributeList DictionaryMember)*
+DictionaryMember = Required Type identifier Default ";"
+Required = "required"?
+PartialDictionary = "dictionary" identifier "{" DictionaryMembers "}" ";"
+Default = ( "=" DefaultValue )?
+DefaultValue = ConstValue
+ / string
+ / "[" "]"
+Inheritance = ( ":" identifier )?
+Enum = "enum" identifier "{" EnumValueList "}" ";"
+EnumValueList = string EnumValueListComma
+EnumValueListComma = ( "," EnumValueListString )?
+EnumValueListString = ( string EnumValueListComma )?
+CallbackRest = identifier "=" ReturnType "(" ArgumentList ")" ";"
+Typedef = "typedef" Type identifier ";"
+ImplementsStatement = identifier "implements" identifier ";"
+Const = "const" ConstType identifier "=" ConstValue ";"
+ConstValue = BooleanLiteral
+ / FloatLiteral
+ / integer
+ / "null" { return null; }
+BooleanLiteral = "true" { return true; } / "false" { return false; }
+FloatLiteral = float
+	/ "-Infinity" { return -INF; }
+	/ "Infinity" { return INF; }
+	/ "NaN" { return NAN; }
+Serializer = "serializer" SerializerRest
+SerializerRest = OperationRest
+ / "=" SerializationPattern ";"
+ / ";"
+SerializationPattern = "{" SerializationPatternMap "}"
+ / "[" SerializationPatternList "]"
+ / identifier
+SerializationPatternMap = "getter"
+ / "inherit" Identifiers
+ / identifier Identifiers
+ / ""
+SerializationPatternList = "getter"
+ / identifier Identifiers
+ / ""
+Stringifier = "stringifier" StringifierRest
+StringifierRest = ReadOnly AttributeRest
+ / ReturnType OperationRest
+ / ";"
+StaticMember = "static" StaticMemberRest
+StaticMemberRest = ReadOnly AttributeRest
+ / ReturnType OperationRest
+ReadOnlyMember = "readonly" ReadOnlyMemberRest
+ReadOnlyMemberRest = AttributeRest
+ReadWriteAttribute = "inherit" ReadOnly AttributeRest
+ / AttributeRest
+AttributeRest = "attribute" Type AttributeName ";"
+AttributeName = AttributeNameKeyword
+ / identifier
+AttributeNameKeyword = "required"
+Inherit = "inherit"?
+ReadOnly = "readonly"?
+Operation = ReturnType OperationRest
+ / SpecialOperation
+SpecialOperation = Special+ ReturnType OperationRest
+Special = "getter"
+ / "setter"
+ / "deleter"
+ / "legacycaller"
+OperationRest = OptionalIdentifier "(" ArgumentList ")" ";"
+OptionalIdentifier = identifier?
+ArgumentList = Argument Arguments / ""
+Arguments = "," Argument Arguments / ""
+Argument = ExtendedAttributeList OptionalOrRequiredArgument
+OptionalOrRequiredArgument = "optional" Type ArgumentName Default
+ / Type Ellipsis ArgumentName
+ArgumentName = ArgumentNameKeyword
+ / identifier
+Ellipsis = "..."?
+Iterable = "iterable" "<" Type OptionalType ">" ";"
+OptionalType = "," Type / ""
+ExtendedAttributeList = "[" ExtendedAttribute ExtendedAttributes "]" / ""
+ExtendedAttributes = "," ExtendedAttribute ExtendedAttributes / ""
+ExtendedAttribute = "(" ExtendedAttributeInner ")" ExtendedAttributeRest
+ / "[" ExtendedAttributeInner "]" ExtendedAttributeRest
+ / "{" ExtendedAttributeInner "}" ExtendedAttributeRest
+ / Other ExtendedAttributeRest
+ExtendedAttributeRest = ExtendedAttribute?
+ExtendedAttributeInner = "(" ExtendedAttributeInner ")" ExtendedAttributeInner
+ / "[" ExtendedAttributeInner "]" ExtendedAttributeInner
+ / "{" ExtendedAttributeInner "}" ExtendedAttributeInner
+ / OtherOrComma ExtendedAttributeInner
+ / ""
+Other = integer
+ / float
+ / identifier
+ / string
+ / otherchar
+ / "-"
+ / "-Infinity"
+ / "."
+ / "..."
+ / ":"
+ / ";"
+ / "<"
+ / "="
+ / ">"
+ / "?"
+ / "ByteString"
+ / "DOMString"
+ / "Infinity"
+ / "NaN"
+ / "USVString"
+ / "any"
+ / "boolean"
+ / "byte"
+ / "double"
+ / "false"
+ / "float"
+ / "long"
+ / "null"
+ / "object"
+ / "octet"
+ / "or"
+ / "optional"
+ / "sequence"
+ / "short"
+ / "true"
+ / "unsigned"
+ / "void"
+ / ArgumentNameKeyword
+ / BufferRelatedType
+ArgumentNameKeyword = "attribute"
+ / "callback"
+ / "const"
+ / "deleter"
+ / "dictionary"
+ / "enum"
+ / "getter"
+ / "implements"
+ / "inherit"
+ / "interface"
+ / "iterable"
+ / "legacycaller"
+ / "partial"
+ / "required"
+ / "serializer"
+ / "setter"
+ / "static"
+ / "stringifier"
+ / "typedef"
+ / "unrestricted"
+OtherOrComma = Other
+ / ","
+Type = SingleType
+ / UnionType Null
+SingleType = NonAnyType
+ / "any"
+UnionType = "(" UnionMemberType "or" UnionMemberType UnionMemberTypes ")"
+UnionMemberType = NonAnyType
+ / UnionType Null
+UnionMemberTypes = "or" UnionMemberType UnionMemberTypes / ""
+NonAnyType = PrimitiveType Null
+ / PromiseType Null
+ / "ByteString" Null
+ / "DOMString" Null
+ / "USVString" Null
+ / identifier Null
+ / "sequence" "<" Type ">" Null
+ / "object" Null
+ / "Error" Null
+ / "DOMException" Null
+ / BufferRelatedType Null
+BufferRelatedType = "ArrayBuffer"
+ / "DataView"
+ / "Int8Array"
+ / "Int16Array"
+ / "Int32Array"
+ / "Uint8Array"
+ / "Uint16Array"
+ / "Uint32Array"
+ / "Uint8ClampedArray"
+ / "Float32Array"
+ / "Float64Array"
+ConstType = PrimitiveType Null
+ / identifier Null
+PrimitiveType = UnsignedIntegerType
+ / UnrestrictedFloatType
+ / "boolean"
+ / "byte"
+ / "octet"
+UnrestrictedFloatType = "unrestricted" FloatType
+ / FloatType
+FloatType = "float"
+ / "double"
+UnsignedIntegerType = "unsigned" IntegerType
+ / IntegerType
+IntegerType = "short"
+ / "long" OptionalLong
+OptionalLong = "long"?
+PromiseType = "Promise" "<" ReturnType ">"
+Null = "?"?
+ReturnType = Type
+ / "void"
+IdentifierList = identifier Identifiers
+Identifiers = "," identifier Identifiers / ""
+ExtendedAttributeNoArgs = identifier
+ExtendedAttributeArgList = identifier "(" ArgumentList ")"
+ExtendedAttributeIdent = identifier "=" identifier
+ExtendedAttributeIdentList = identifier "=" "(" IdentifierList ")"
+ExtendedAttributeNamedArgList = identifier "=" identifier "(" ArgumentList ")"
