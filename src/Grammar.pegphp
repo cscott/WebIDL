@@ -24,13 +24,14 @@ namespace Wikimedia\WebIDL;
 	}
 }
 
-start = Definitions
+start = _ Definitions
 
 /* Line number bookkeeping.
  * Be careful about backtracking after you successfully match this production.
  */
 eol = nl:("\n" / "\r\n" / "\r") { $this->lineNum++; return $nl; }
 
+/* WebIDL terminals */
 integer = m:opt_minus n:( decimal_integer / hex_integer / octal_integer ) {
 	return m*n;
 }
@@ -58,6 +59,11 @@ comment = "//" [^\n\r]* / "/*" ( [^\n\r*]+ / eol / "*" !"/" )* "*/"
 
 otherchar = [^\t\n\r 0-9A-Za-z]
 		   
+/* The 'ignore' production -- we have to include this after every
+ * terminal not defined above */
+_ = ( whitespace / comment )*
+
+/* WebIDL non-terminals */
 Definitions = (ExtendedAttributeList Definition)*
 
 Definition =
@@ -68,12 +74,14 @@ Definition =
 		   / Typedef
 		   / ImplementsStatement
 
-CallbackOrInterface = "callback" CallbackRestOrInterface / Interface
+CallbackOrInterface = "callback" _ CallbackRestOrInterface / Interface
 CallbackRestOrInterface = CallbackRest / Interface
-Interface = "interface" identifier Inheritance "{" InterfaceMembers "}" ";"
-Partial = "partial" PartialDefinition
+Interface =
+    "interface" _ identifier _ Inheritance "{" _ InterfaceMembers "}" _ ";" _
+Partial = "partial" _ PartialDefinition
 PartialDefinition = PartialInterface / PartialDictionary
-PartialInterface = "interface" identifier "{" InterfaceMembers "}" ";"
+PartialInterface =
+	"interface" _ identifier _ "{" _ InterfaceMembers "}" _ ";" _
 InterfaceMembers = ( ExtendedAttributeList InterfaceMember )*
 InterfaceMember = Const
 		   / Operation
@@ -83,96 +91,96 @@ InterfaceMember = Const
 		   / Iterable
 		   / ReadOnlyMember
 		   / ReadWriteAttribute
-Dictionary = "dictionary" identifier Inheritance "{" DictionaryMembers "}" ";"
+Dictionary = "dictionary" _ identifier _ Inheritance "{" _ DictionaryMembers "}" _ ";" _
 DictionaryMembers = (ExtendedAttributeList DictionaryMember)*
-DictionaryMember = Required Type identifier Default ";"
-Required = "required"?
-PartialDictionary = "dictionary" identifier "{" DictionaryMembers "}" ";"
-Default = ( "=" DefaultValue )?
+DictionaryMember = Required Type identifier _ Default ";" _
+Required = "required" _ / ""
+PartialDictionary = "dictionary" _ identifier _ "{" _ DictionaryMembers "}" _ ";" _
+Default = ( "=" _ DefaultValue )?
 DefaultValue = ConstValue
- / string
- / "[" "]"
-Inheritance = ( ":" identifier )?
-Enum = "enum" identifier "{" EnumValueList "}" ";"
-EnumValueList = string EnumValueListComma
-EnumValueListComma = ( "," EnumValueListString )?
-EnumValueListString = ( string EnumValueListComma )?
-CallbackRest = identifier "=" ReturnType "(" ArgumentList ")" ";"
-Typedef = "typedef" Type identifier ";"
-ImplementsStatement = identifier "implements" identifier ";"
-Const = "const" ConstType identifier "=" ConstValue ";"
+ / string _
+ / "[" _ "]" _
+Inheritance = ( ":" _ identifier _ )?
+Enum = "enum" _ identifier _ "{" _ EnumValueList "}" _ ";" _
+EnumValueList = string _ EnumValueListComma
+EnumValueListComma = ( "," _ EnumValueListString )?
+EnumValueListString = ( string _ EnumValueListComma )?
+CallbackRest = identifier _ "=" _ ReturnType "(" _ ArgumentList ")" _ ";" _
+Typedef = "typedef" _ Type identifier _ ";" _
+ImplementsStatement = identifier _ "implements" _ identifier _ ";" _
+Const = "const" _ ConstType identifier _ "=" _ ConstValue ";" _
 ConstValue = BooleanLiteral
  / FloatLiteral
- / integer
- / "null" { return null; }
-BooleanLiteral = "true" { return true; } / "false" { return false; }
-FloatLiteral = float
-	/ "-Infinity" { return -INF; }
-	/ "Infinity" { return INF; }
-	/ "NaN" { return NAN; }
-Serializer = "serializer" SerializerRest
+ / i:integer _ { return $i; }
+ / "null" _ { return null; }
+BooleanLiteral = "true" _ { return true; } / "false" _ { return false; }
+FloatLiteral = f:float _ { return $f; }
+	/ "-Infinity" _ { return -INF; }
+	/ "Infinity" _ { return INF; }
+	/ "NaN" _ { return NAN; }
+Serializer = "serializer" _ SerializerRest
 SerializerRest = OperationRest
- / "=" SerializationPattern ";"
- / ";"
-SerializationPattern = "{" SerializationPatternMap "}"
- / "[" SerializationPatternList "]"
- / identifier
-SerializationPatternMap = "getter"
- / "inherit" Identifiers
- / identifier Identifiers
+ / "=" _ SerializationPattern ";" _
+ / ";" _
+SerializationPattern = "{" _ SerializationPatternMap "}" _
+ / "[" _ SerializationPatternList "]" _
+ / identifier _
+SerializationPatternMap = "getter" _
+ / "inherit" _ Identifiers
+ / identifier _ Identifiers
  / ""
-SerializationPatternList = "getter"
- / identifier Identifiers
+SerializationPatternList = "getter" _
+ / identifier _ Identifiers
  / ""
-Stringifier = "stringifier" StringifierRest
+Stringifier = "stringifier" _ StringifierRest
 StringifierRest = ReadOnly AttributeRest
  / ReturnType OperationRest
- / ";"
-StaticMember = "static" StaticMemberRest
+ / ";" _
+StaticMember = "static" _ StaticMemberRest
 StaticMemberRest = ReadOnly AttributeRest
  / ReturnType OperationRest
-ReadOnlyMember = "readonly" ReadOnlyMemberRest
+ReadOnlyMember = "readonly" _ ReadOnlyMemberRest
 ReadOnlyMemberRest = AttributeRest
-ReadWriteAttribute = "inherit" ReadOnly AttributeRest
+ReadWriteAttribute = "inherit" _ ReadOnly AttributeRest
  / AttributeRest
-AttributeRest = "attribute" Type AttributeName ";"
+AttributeRest = "attribute" _ Type AttributeName ";" _
 AttributeName = AttributeNameKeyword
- / identifier
-AttributeNameKeyword = "required"
-Inherit = "inherit"?
-ReadOnly = "readonly"?
+ / identifier _
+AttributeNameKeyword = "required" _
+Inherit = ("inherit" _)?
+ReadOnly = ("readonly" _)?
 Operation = ReturnType OperationRest
  / SpecialOperation
 SpecialOperation = Special+ ReturnType OperationRest
-Special = "getter"
- / "setter"
- / "deleter"
- / "legacycaller"
-OperationRest = OptionalIdentifier "(" ArgumentList ")" ";"
-OptionalIdentifier = identifier?
+Special = "getter" _
+ / "setter" _
+ / "deleter" _
+ / "legacycaller" _
+OperationRest = OptionalIdentifier "(" _ ArgumentList ")" _ ";" _
+OptionalIdentifier = (identifier _)?
 ArgumentList = Argument Arguments / ""
-Arguments = "," Argument Arguments / ""
+Arguments = "," _ Argument Arguments / ""
 Argument = ExtendedAttributeList OptionalOrRequiredArgument
-OptionalOrRequiredArgument = "optional" Type ArgumentName Default
+OptionalOrRequiredArgument = "optional" _ Type ArgumentName Default
  / Type Ellipsis ArgumentName
 ArgumentName = ArgumentNameKeyword
- / identifier
-Ellipsis = "..."?
-Iterable = "iterable" "<" Type OptionalType ">" ";"
-OptionalType = "," Type / ""
-ExtendedAttributeList = "[" ExtendedAttribute ExtendedAttributes "]" / ""
-ExtendedAttributes = "," ExtendedAttribute ExtendedAttributes / ""
-ExtendedAttribute = "(" ExtendedAttributeInner ")" ExtendedAttributeRest
- / "[" ExtendedAttributeInner "]" ExtendedAttributeRest
- / "{" ExtendedAttributeInner "}" ExtendedAttributeRest
+ / identifier _
+Ellipsis = ("..." _)?
+Iterable = "iterable" _ "<" _ Type OptionalType ">" _ ";" _
+OptionalType = ( "," _ Type )?
+ExtendedAttributeList = "[" _ ExtendedAttribute ExtendedAttributes "]" _ / ""
+ExtendedAttributes = "," _ ExtendedAttribute ExtendedAttributes / ""
+ExtendedAttribute = "(" _ ExtendedAttributeInner ")" _ ExtendedAttributeRest
+ / "[" _ ExtendedAttributeInner "]" _ ExtendedAttributeRest
+ / "{" _ ExtendedAttributeInner "}" _ ExtendedAttributeRest
  / Other ExtendedAttributeRest
 ExtendedAttributeRest = ExtendedAttribute?
-ExtendedAttributeInner = "(" ExtendedAttributeInner ")" ExtendedAttributeInner
- / "[" ExtendedAttributeInner "]" ExtendedAttributeInner
- / "{" ExtendedAttributeInner "}" ExtendedAttributeInner
+ExtendedAttributeInner = "(" _ ExtendedAttributeInner ")" _ ExtendedAttributeInner
+ / "[" _ ExtendedAttributeInner "]" _ ExtendedAttributeInner
+ / "{" _ ExtendedAttributeInner "}" _ ExtendedAttributeInner
  / OtherOrComma ExtendedAttributeInner
  / ""
-Other = integer
+Other = (integer
  / float
  / identifier
  / string
@@ -208,10 +216,11 @@ Other = integer
  / "short"
  / "true"
  / "unsigned"
- / "void"
+ / "void" ) _
  / ArgumentNameKeyword
  / BufferRelatedType
-ArgumentNameKeyword = "attribute"
+ArgumentNameKeyword =
+ ( "attribute"
  / "callback"
  / "const"
  / "deleter"
@@ -230,29 +239,29 @@ ArgumentNameKeyword = "attribute"
  / "static"
  / "stringifier"
  / "typedef"
- / "unrestricted"
+ / "unrestricted" ) _
 OtherOrComma = Other
- / ","
+ / "," _
 Type = SingleType
  / UnionType Null
 SingleType = NonAnyType
- / "any"
-UnionType = "(" UnionMemberType "or" UnionMemberType UnionMemberTypes ")"
+ / "any" _
+UnionType = "(" _ UnionMemberType ("or" _ UnionMemberType)+ ")" _
 UnionMemberType = NonAnyType
  / UnionType Null
-UnionMemberTypes = "or" UnionMemberType UnionMemberTypes / ""
 NonAnyType = PrimitiveType Null
  / PromiseType Null
- / "ByteString" Null
- / "DOMString" Null
- / "USVString" Null
- / identifier Null
- / "sequence" "<" Type ">" Null
- / "object" Null
- / "Error" Null
- / "DOMException" Null
+ / "ByteString" _ Null
+ / "DOMString" _ Null
+ / "USVString" _ Null
+ / identifier _ Null
+ / "sequence" _ "<" _ Type ">" _ Null
+ / "object" _ Null
+ / "Error" _ Null
+ / "DOMException" _ Null
  / BufferRelatedType Null
-BufferRelatedType = "ArrayBuffer"
+BufferRelatedType =
+ ( "ArrayBuffer"
  / "DataView"
  / "Int8Array"
  / "Int16Array"
@@ -262,31 +271,30 @@ BufferRelatedType = "ArrayBuffer"
  / "Uint32Array"
  / "Uint8ClampedArray"
  / "Float32Array"
- / "Float64Array"
+ / "Float64Array" ) _
 ConstType = PrimitiveType Null
- / identifier Null
+ / identifier _ Null
 PrimitiveType = UnsignedIntegerType
  / UnrestrictedFloatType
- / "boolean"
- / "byte"
- / "octet"
-UnrestrictedFloatType = "unrestricted" FloatType
+ / "boolean" _
+ / "byte" _
+ / "octet" _
+UnrestrictedFloatType = "unrestricted" _ FloatType
  / FloatType
-FloatType = "float"
- / "double"
-UnsignedIntegerType = "unsigned" IntegerType
+FloatType = ("float" / "double") _
+UnsignedIntegerType = "unsigned" _ IntegerType
  / IntegerType
-IntegerType = "short"
- / "long" OptionalLong
-OptionalLong = "long"?
-PromiseType = "Promise" "<" ReturnType ">"
-Null = "?"?
+IntegerType = "short" _
+ / "long" _ OptionalLong
+OptionalLong = ("long" _)?
+PromiseType = "Promise" _ "<" _ ReturnType ">" _
+Null = ("?" _)?
 ReturnType = Type
- / "void"
-IdentifierList = identifier Identifiers
-Identifiers = "," identifier Identifiers / ""
-ExtendedAttributeNoArgs = identifier
-ExtendedAttributeArgList = identifier "(" ArgumentList ")"
-ExtendedAttributeIdent = identifier "=" identifier
-ExtendedAttributeIdentList = identifier "=" "(" IdentifierList ")"
-ExtendedAttributeNamedArgList = identifier "=" identifier "(" ArgumentList ")"
+ / "void" _
+IdentifierList = identifier _ Identifiers
+Identifiers = "," _ identifier _ Identifiers / ""
+ExtendedAttributeNoArgs = identifier _
+ExtendedAttributeArgList = identifier _ "(" _ ArgumentList ")" _
+ExtendedAttributeIdent = identifier _ "=" _ identifier _
+ExtendedAttributeIdentList = identifier _ "=" _ "(" _ IdentifierList ")" _
+ExtendedAttributeNamedArgList = identifier _ "=" _ identifier _ "(" _ ArgumentList ")" _
