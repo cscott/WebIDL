@@ -44,12 +44,12 @@ hex_integer = ("0x" / "0X" ) s:$( [0-9A-Fa-f]+ ) { return hexdec($s); }
 
 octal_integer = s:$( "0" [0-7]* ) { return octdec( $s ); }
 
-float = s:$( m:opt_minus (
+decimal = s:$( m:opt_minus (
 	( [0-9]+ "." [0-9]* / [0-9]* "." [0-9]+ ) ( [Ee] [+-]? [0-9]+ )? /
 	[0-9]+ [Ee] [+-]? [0-9]+
 ) ) { return floatval( $s ); }
 
-identifier = s:$( "_"? [A-Za-z] [-_0-9A-Za-z]* ) { return $s; }
+identifier = s:$( [-_]? [A-Za-z] [-_0-9A-Za-z]* ) { return $s; }
 
 string = "\"" s:$([^\"]*) "\"" { return $s; }
 
@@ -67,121 +67,288 @@ _ = ( whitespace / comment )*
 Definitions = (ExtendedAttributeList Definition)*
 
 Definition =
-		   CallbackOrInterface
+		   CallbackOrInterfaceOrMixin
+		   / Namespace
 		   / Partial
 		   / Dictionary
 		   / Enum
 		   / Typedef
-		   / ImplementsStatement
+		   / IncludesStatement
 
-CallbackOrInterface = "callback" _ CallbackRestOrInterface / Interface
-CallbackRestOrInterface = CallbackRest / Interface
-Interface =
-    "interface" _ identifier _ Inheritance "{" _ InterfaceMembers "}" _ ";" _
+ArgumentNameKeyword =
+ ( "async"
+ / "attribute"
+ / "callback"
+ / "const"
+ / "constructor"
+ / "deleter"
+ / "dictionary"
+ / "enum"
+ / "getter"
+ / "includes"
+ / "inherit"
+ / "interface"
+ / "iterable"
+ / "maplike"
+ / "mixin"
+ / "namespace"
+ / "partial"
+ / "readonly"
+ / "required"
+ / "setlike"
+ / "setter"
+ / "static"
+ / "stringifier"
+ / "typedef"
+ / "unrestricted" ) _
+
+CallbackOrInterfaceOrMixin =
+	"callback" _ CallbackRestOrInterface
+  / "interface" _ InterfaceOrMixin
+InterfaceOrMixin = InterfaceRest / MixinRest
+InterfaceRest =
+    identifier _ Inheritance "{" _ InterfaceMembers "}" _ ";" _
 Partial = "partial" _ PartialDefinition
-PartialDefinition = PartialInterface / PartialDictionary
-PartialInterface =
-	"interface" _ identifier _ "{" _ InterfaceMembers "}" _ ";" _
+PartialDefinition =
+    "interface" _ PartialInterfaceOrPartialMixin
+  / PartialDictionary
+  / Namespace
+PartialInterfaceOrPartialMixin =
+	PartialInterfaceRest
+  / MixinRest
+PartialInterfaceRest =
+	identifier _ "{" _ PartialInterfaceMembers "}" _ ";" _
 InterfaceMembers = ( ExtendedAttributeList InterfaceMember )*
-InterfaceMember = Const
-		   / Operation
-		   / Serializer
-		   / Stringifier
-		   / StaticMember
-		   / Iterable
-		   / ReadOnlyMember
-		   / ReadWriteAttribute
-Dictionary = "dictionary" _ identifier _ Inheritance "{" _ DictionaryMembers "}" _ ";" _
-DictionaryMembers = (ExtendedAttributeList DictionaryMember)*
-DictionaryMember = Required Type identifier _ Default ";" _
-Required = "required" _ / ""
-PartialDictionary = "dictionary" _ identifier _ "{" _ DictionaryMembers "}" _ ";" _
-Default = ( "=" _ DefaultValue )?
-DefaultValue = ConstValue
+InterfaceMember =
+	PartialInterfaceMember
+  / Constructor
+PartialInterfaceMembers = ( ExtendedAttributeList PartialInterfaceMember )*
+PartialInterfaceMember =
+	Const
+  / Operation
+  / Stringifier
+  / StaticMember
+  / Iterable
+  / AsyncIterable
+  / ReadOnlyMember
+  / ReadWriteAttribute
+  / ReadWriteMaplike
+  / ReadWriteSetlike
+  / InheritAttribute
+Inheritance = ( ":" _ identifier _ )?
+MixinRest = "mixin" _ identifier _ "{" _ MixinMembers "}" _ ";" _
+MixinMembers = ( ExtendedAttributeList MixinMember )*
+MixinMember =
+	Const
+  / RegularOperation
+  / Stringifier
+  / OptionalReadOnly AttributeRest
+
+IncludesStatement = identifier _ "includes" _ identifier _ ";" _
+		   
+CallbackRestOrInterface =
+	CallbackRest
+  / "interface" _ identifier _ "{" _ CallbackInterfaceMembers "}" _ ";" _
+CallbackInterfaceMembers = ( ExtendedAttributeList CallbackInterfaceMember )*
+CallbackInterfaceMember =
+	Const
+  / RegularOperation
+
+Const = "const" _ ConstType identifier _ "=" _ ConstValue ";" _
+ConstValue =
+   BooleanLiteral
+ / FloatLiteral
+ / i:integer _ { return $i; }
+BooleanLiteral = "true" _ { return true; } / "false" _ { return false; }
+FloatLiteral = f:decimal _ { return $f; }
+	/ "-Infinity" _ { return -INF; }
+	/ "Infinity" _ { return INF; }
+	/ "NaN" _ { return NAN; }
+ConstType = PrimitiveType
+ / identifier _
+
+ReadOnlyMember = "readonly" _ ReadOnlyMemberRest
+ReadOnlyMemberRest =
+   AttributeRest
+ / MaplikeRest
+ / SetlikeRest
+ReadWriteAttribute =
+   AttributeRest
+InheritAttribute = "inherit" _ AttributeRest
+AttributeRest = "attribute" _ TypeWithExtendedAttributes AttributeName ";" _
+AttributeName = AttributeNameKeyword
+ / identifier _
+AttributeNameKeyword = ("async" / "required") _
+OptionalReadOnly = ("readonly" _)?
+DefaultValue =
+   ConstValue
  / string _
  / "[" _ "]" _
-Inheritance = ( ":" _ identifier _ )?
+ / "{" _ "}" _
+ / "null" _
+
+Operation =
+   RegularOperation
+ / SpecialOperation
+RegularOperation = Type OperationRest
+SpecialOperation = Special RegularOperation
+Special = "getter" _
+ / "setter" _
+ / "deleter" _
+OperationRest = OptionalOperationName "(" _ ArgumentList ")" _ ";" _
+OptionalOperationName = OperationName?
+OperationName =
+   OperationNameKeyword
+ / identifier _
+OperationNameKeyword = "includes" _
+
+ArgumentList = Argument Arguments / ""
+Arguments = "," _ Argument Arguments / ""
+Argument = ExtendedAttributeList ArgumentRest
+ArgumentRest =
+   "optional" _ TypeWithExtendedAttributes ArgumentName Default
+ / Type Ellipsis ArgumentName
+ArgumentName =
+   ArgumentNameKeyword
+ / identifier _
+Ellipsis = ("..." _)?
+
+Constructor =
+   "constructor" _ "(" _ ArgumentList ")" _ ";" _
+Stringifier =
+   "stringifier" _ StringifierRest
+StringifierRest =
+   OptionalReadOnly AttributeRest
+ / RegularOperation
+ / ";" _
+StaticMember = "static" _ StaticMemberRest
+StaticMemberRest =
+   OptionalReadOnly AttributeRest
+ / RegularOperation
+Iterable =
+   "iterable" _ "<" _ TypeWithExtendedAttributes OptionalType ">" _ ";" _
+OptionalType = ( "," _ TypeWithExtendedAttributes )?
+AsyncIterable =
+   "async" _ "iterable" _ "<" _ TypeWithExtendedAttributes OptionalType ">" _ OptionalArgumentList ";" _
+OptionalArgumentList =
+   "(" _ ArgumentList ")" _
+ / ""
+ReadWriteMaplike = MaplikeRest
+MaplikeRest =
+   "maplike" _ "<" _ TypeWithExtendedAttributes "," _ TypeWithExtendedAttributes ">" _ ";" _
+ReadWriteSetlike = SetlikeRest
+SetlikeRest =
+   "setlike" _ "<" _ TypeWithExtendedAttributes ">" _ ";" _
+
+Namespace =
+   "namespace" _ identifier _ "{" _ NamespaceMembers "}" _ ";" _
+NamespaceMembers = ( ExtendedAttributeList NamespaceMember )*
+NamespaceMember =
+   RegularOperation
+ / "readonly" _ AttributeRest
+
+Dictionary =
+   "dictionary" _ identifier _ Inheritance "{" _ DictionaryMembers "}" _ ";" _
+DictionaryMembers = DictionaryMember*
+DictionaryMember = ExtendedAttributeList DictionaryMemberRest
+DictionaryMemberRest =
+   "required" _ TypeWithExtendedAttributes identifier _ ";" _
+ / Type identifier _ Default ";" _
+PartialDictionary =
+   "dictionary" _ identifier _ "{" _ DictionaryMembers "}" _ ";" _
+Default = ( "=" _ DefaultValue )?
 Enum = "enum" _ identifier _ "{" _ EnumValueList "}" _ ";" _
 EnumValueList = string _ EnumValueListComma
 EnumValueListComma = ( "," _ EnumValueListString )?
 EnumValueListString = ( string _ EnumValueListComma )?
-CallbackRest = identifier _ "=" _ ReturnType "(" _ ArgumentList ")" _ ";" _
-Typedef = "typedef" _ Type identifier _ ";" _
-ImplementsStatement = identifier _ "implements" _ identifier _ ";" _
-Const = "const" _ ConstType identifier _ "=" _ ConstValue ";" _
-ConstValue = BooleanLiteral
- / FloatLiteral
- / i:integer _ { return $i; }
- / "null" _ { return null; }
-BooleanLiteral = "true" _ { return true; } / "false" _ { return false; }
-FloatLiteral = f:float _ { return $f; }
-	/ "-Infinity" _ { return -INF; }
-	/ "Infinity" _ { return INF; }
-	/ "NaN" _ { return NAN; }
-Serializer = "serializer" _ SerializerRest
-SerializerRest = OperationRest
- / "=" _ SerializationPattern ";" _
- / ";" _
-SerializationPattern = "{" _ SerializationPatternMap "}" _
- / "[" _ SerializationPatternList "]" _
- / identifier _
-SerializationPatternMap = "getter" _
- / "inherit" _ Identifiers
- / identifier _ Identifiers
- / ""
-SerializationPatternList = "getter" _
- / identifier _ Identifiers
- / ""
-Stringifier = "stringifier" _ StringifierRest
-StringifierRest = ReadOnly AttributeRest
- / ReturnType OperationRest
- / ";" _
-StaticMember = "static" _ StaticMemberRest
-StaticMemberRest = ReadOnly AttributeRest
- / ReturnType OperationRest
-ReadOnlyMember = "readonly" _ ReadOnlyMemberRest
-ReadOnlyMemberRest = AttributeRest
-ReadWriteAttribute = "inherit" _ ReadOnly AttributeRest
- / AttributeRest
-AttributeRest = "attribute" _ Type AttributeName ";" _
-AttributeName = AttributeNameKeyword
- / identifier _
-AttributeNameKeyword = "required" _
-Inherit = ("inherit" _)?
-ReadOnly = ("readonly" _)?
-Operation = ReturnType OperationRest
- / SpecialOperation
-SpecialOperation = Special+ ReturnType OperationRest
-Special = "getter" _
- / "setter" _
- / "deleter" _
- / "legacycaller" _
-OperationRest = OptionalIdentifier "(" _ ArgumentList ")" _ ";" _
-OptionalIdentifier = (identifier _)?
-ArgumentList = Argument Arguments / ""
-Arguments = "," _ Argument Arguments / ""
-Argument = ExtendedAttributeList OptionalOrRequiredArgument
-OptionalOrRequiredArgument = "optional" _ Type ArgumentName Default
- / Type Ellipsis ArgumentName
-ArgumentName = ArgumentNameKeyword
- / identifier _
-Ellipsis = ("..." _)?
-Iterable = "iterable" _ "<" _ Type OptionalType ">" _ ";" _
-OptionalType = ( "," _ Type )?
+CallbackRest = identifier _ "=" _ Type "(" _ ArgumentList ")" _ ";" _
+Typedef = "typedef" _ TypeWithExtendedAttributes identifier _ ";" _
+
+Type =
+   SingleType
+ / UnionType Null
+TypeWithExtendedAttributes =
+   ExtendedAttributeList Type
+SingleType =
+   DistinguishableType
+ / "any" _
+ / PromiseType
+UnionType = "(" _ UnionMemberType ("or" _ UnionMemberType)+ ")" _
+UnionMemberType =
+   ExtendedAttributeList DistinguishableType
+ / UnionType Null
+
+DistinguishableType =
+   PrimitiveType Null
+ / StringType Null
+ / identifier _ Null
+ / "sequence" _ "<" _ TypeWithExtendedAttributes ">" _ Null
+ / "object" _ Null
+ / "symbol" _ Null
+ / BufferRelatedType Null
+ / "FrozenArray" _ "<" _ TypeWithExtendedAttributes ">" _ Null
+ / "ObservableArray" _ "<" _ TypeWithExtendedAttributes ">" _ Null
+ / RecordType Null
+PrimitiveType =
+   UnsignedIntegerType
+ / UnrestrictedFloatType
+ / "undefined" _
+ / "boolean" _
+ / "byte" _
+ / "octet" _
+ / "bigint" _
+UnrestrictedFloatType =
+   "unrestricted" _ FloatType
+ / FloatType
+FloatType = ( "float" / "double" ) _
+UnsignedIntegerType =
+   "unsigned" _ IntegerType
+ / IntegerType
+IntegerType =
+   "short" _
+ / "long" _ OptionalLong
+OptionalLong = ( "long" _ )?
+
+StringType =
+   "ByteString" _
+ / "DOMString" _
+ / "USVString" _
+
+PromiseType =
+   "Promise" _ "<" _ Type ">" _
+RecordType =
+   "record" _ "<" _ StringType "," _ TypeWithExtendedAttributes ">" _
+Null = ("?" _)?
+
+BufferRelatedType =
+ ( "ArrayBuffer"
+ / "DataView"
+ / "Int8Array"
+ / "Int16Array"
+ / "Int32Array"
+ / "Uint8Array"
+ / "Uint16Array"
+ / "Uint32Array"
+ / "Uint8ClampedArray"
+ / "Float32Array"
+ / "Float64Array" ) _
+
 ExtendedAttributeList = "[" _ ExtendedAttribute ExtendedAttributes "]" _ / ""
 ExtendedAttributes = "," _ ExtendedAttribute ExtendedAttributes / ""
-ExtendedAttribute = "(" _ ExtendedAttributeInner ")" _ ExtendedAttributeRest
+ExtendedAttribute =
+   "(" _ ExtendedAttributeInner ")" _ ExtendedAttributeRest
  / "[" _ ExtendedAttributeInner "]" _ ExtendedAttributeRest
  / "{" _ ExtendedAttributeInner "}" _ ExtendedAttributeRest
  / Other ExtendedAttributeRest
 ExtendedAttributeRest = ExtendedAttribute?
-ExtendedAttributeInner = "(" _ ExtendedAttributeInner ")" _ ExtendedAttributeInner
+ExtendedAttributeInner =
+   "(" _ ExtendedAttributeInner ")" _ ExtendedAttributeInner
  / "[" _ ExtendedAttributeInner "]" _ ExtendedAttributeInner
  / "{" _ ExtendedAttributeInner "}" _ ExtendedAttributeInner
  / OtherOrComma ExtendedAttributeInner
  / ""
 Other = (integer
- / float
+ / decimal
  / identifier
  / string
  / otherchar
@@ -197,10 +364,14 @@ Other = (integer
  / "?"
  / "ByteString"
  / "DOMString"
+ / "FrozenArray"
  / "Infinity"
  / "NaN"
+ / "ObservableArray"
+ / "Promise"
  / "USVString"
  / "any"
+ / "bigint"
  / "boolean"
  / "byte"
  / "double"
@@ -212,85 +383,18 @@ Other = (integer
  / "octet"
  / "or"
  / "optional"
+ / "record"
  / "sequence"
  / "short"
+ / "symbol"
  / "true"
  / "unsigned"
- / "void" ) _
+ / "undefined" ) _
  / ArgumentNameKeyword
  / BufferRelatedType
-ArgumentNameKeyword =
- ( "attribute"
- / "callback"
- / "const"
- / "deleter"
- / "dictionary"
- / "enum"
- / "getter"
- / "implements"
- / "inherit"
- / "interface"
- / "iterable"
- / "legacycaller"
- / "partial"
- / "required"
- / "serializer"
- / "setter"
- / "static"
- / "stringifier"
- / "typedef"
- / "unrestricted" ) _
-OtherOrComma = Other
+OtherOrComma =
+   Other
  / "," _
-Type = SingleType
- / UnionType Null
-SingleType = NonAnyType
- / "any" _
-UnionType = "(" _ UnionMemberType ("or" _ UnionMemberType)+ ")" _
-UnionMemberType = NonAnyType
- / UnionType Null
-NonAnyType = PrimitiveType Null
- / PromiseType Null
- / "ByteString" _ Null
- / "DOMString" _ Null
- / "USVString" _ Null
- / identifier _ Null
- / "sequence" _ "<" _ Type ">" _ Null
- / "object" _ Null
- / "Error" _ Null
- / "DOMException" _ Null
- / BufferRelatedType Null
-BufferRelatedType =
- ( "ArrayBuffer"
- / "DataView"
- / "Int8Array"
- / "Int16Array"
- / "Int32Array"
- / "Uint8Array"
- / "Uint16Array"
- / "Uint32Array"
- / "Uint8ClampedArray"
- / "Float32Array"
- / "Float64Array" ) _
-ConstType = PrimitiveType Null
- / identifier _ Null
-PrimitiveType = UnsignedIntegerType
- / UnrestrictedFloatType
- / "boolean" _
- / "byte" _
- / "octet" _
-UnrestrictedFloatType = "unrestricted" _ FloatType
- / FloatType
-FloatType = ("float" / "double") _
-UnsignedIntegerType = "unsigned" _ IntegerType
- / IntegerType
-IntegerType = "short" _
- / "long" _ OptionalLong
-OptionalLong = ("long" _)?
-PromiseType = "Promise" _ "<" _ ReturnType ">" _
-Null = ("?" _)?
-ReturnType = Type
- / "void" _
 IdentifierList = identifier _ Identifiers
 Identifiers = "," _ identifier _ Identifiers / ""
 ExtendedAttributeNoArgs = identifier _
