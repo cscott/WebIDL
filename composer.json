@@ -1,0 +1,61 @@
+{
+	"name": "wikimedia/webidl",
+	"description": "WebIDL parser for PHP",
+	"keywords": [
+		"webidl",
+		"wikipeg"
+	],
+	"license": "MIT",
+	"homepage": "https://www.mediawiki.org/wiki/WebIDL",
+	"authors": [
+		{
+			"name": "C. Scott Ananian",
+			"email": "cananian@wikimedia.org"
+		}
+	],
+	"require": {
+		"php": ">=7.2.0",
+		"ext-mbstring": "*",
+		"ext-xml": "*"
+	},
+	"suggest": {
+		"ext-intl": "*"
+	},
+	"require-dev": {
+		"jakub-onderka/php-parallel-lint": "1.0.0",
+		"jakub-onderka/php-console-highlighter": "0.4.0",
+		"mediawiki/mediawiki-codesniffer": "30.0.0",
+		"mediawiki/mediawiki-phan-config": "0.9.1",
+		"mediawiki/minus-x": "1.0.0",
+		"ockcyp/covers-validator": "1.1.1",
+		"phpunit/phpunit": "^8.5",
+		"wikimedia/wikipeg": "^2.0.5",
+		"wikimedia/testing-access-wrapper": "~1.0"
+	},
+	"autoload": {
+		"psr-4": {
+			"Wikimedia\\WebIDL\\": "src/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"Wikimedia\\WebIDL\\Tests\\": "tests/"
+		}
+	},
+	"scripts": {
+		"test": [
+			"parallel-lint . --exclude vendor",
+			"phpunit",
+			"@phan",
+			"covers-validator",
+			"phpcs -sp",
+			"minus-x check ."
+		],
+		"cover": "phpunit --coverage-html coverage",
+		"fix": [
+			"minus-x fix .",
+			"phpcbf"
+		],
+		"phan": "phan --allow-polyfill-parser"
+	}
+}
