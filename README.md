@@ -36,9 +36,38 @@ keys:
 
 ## AST (Abstract Syntax Tree)
 
-Will be documented.  For now, look at the [webidl2 AST
-docs](https://github.com/w3c/webidl2.js#ast-abstract-syntax-tree) and
-convert JavaScript objects to PHP associative arrays.
+The AST output matches the
+[webidl2 AST docs](https://github.com/w3c/webidl2.js#ast-abstract-syntax-tree)
+with PHP associative arrays replacing JavaScript objects in the usual way
+(ie, JSON output deserialized in PHP with `json_decode($ast, true)`).
+
+Briefly, the WebIDL input:
+```
+interface _Iroha : _Magic {};
+_Iroha includes _Color;
+```
+Gives the following PHP array after parsing:
+```php
+[
+     [
+       "type" => "interface",
+       "name" => "Iroha",
+       "inheritance" => "Magic",
+       "members" => [],
+       "extAttrs" => [],
+       "partial" => false,
+     ],
+     [
+       "type" => "includes",
+       "extAttrs" => [],
+       "target" => "Iroha",
+       "includes" => "Color",
+     ],
+]
+```
+
+Refer to the `webidl2` docs or the files in `tests/syntax/` for more
+details.
 
 ## Tests
 
