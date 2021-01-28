@@ -42,6 +42,9 @@
 			"Wikimedia\\WebIDL\\Tests\\": "tests/"
 		}
 	},
+	"bin": [
+		"bin/webidl"
+	],
 	"scripts": {
 		"test": [
 			"parallel-lint . --exclude vendor",
@@ -49,7 +52,9 @@
 			"@phan",
 			"covers-validator",
 			"phpcs -sp",
-			"minus-x check ."
+			"minus-x check .",
+			"echo Ensure the binary is not broken:",
+			"bin/webidl tests/syntax/idl/escaped-name.webidl"
 		],
 		"cover": "phpunit --coverage-html coverage",
 		"fix": [
