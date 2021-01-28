@@ -3,7 +3,7 @@
  * 2021-01-27 C. Scott Ananian <cananian@wikimedia.org>
  *
  * Current grammar is based on 29afaf0a97d0175fc3749628140f944dceddb2c5
- * of spac at https://heycam.github.io/webidl/ (2021-01-15)
+ * of spec at https://heycam.github.io/webidl/ (2021-01-15)
  *
  * PLEASE UPDATE THE ABOVE COMMIT HASH WHEN FURTHER UPDATES ARE MADE.
  * (And try to keep productions in the same order as in the spec.)

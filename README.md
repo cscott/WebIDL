@@ -73,7 +73,7 @@ details.
 
 Test cases in `tests/invalid` and `tests/syntax` come from
 [`webidl2.js`](https://github.com/w3c/webidl2.js/tree/gh-pages/test).
-If ypu update them from upstream, please update the commit hash
+If you update them from upstream, please update the commit hash
 in `tests/WebIDLTest.php` as well.
 
 ```bash
