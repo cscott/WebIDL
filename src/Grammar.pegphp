@@ -22,6 +22,36 @@ namespace Wikimedia\WebIDL;
 		$g->filename = $filename;
 		return $g->parse( $contents );
 	}
+
+	private static $basicType = [
+		'type' => null,
+		'extAttrs' => [],
+		'generic' => '',
+		'nullable' => false,
+		'union' => false,
+		'idlType' => null,
+	];
+
+	private static $basicExtAttr = [
+		'type' => 'extended-attribute',
+		'name' => null,
+		'arguments' => [],
+		'rhs' => null,
+	];
+
+	private static function setType(array &$t, string $val): array {
+		$t['type'] = $val;
+		if (is_array($t['idlType'] ?? null)) {
+			if ($t['generic'] === '' && $t['union'] === false) {
+				self::setType($t['idlType'], $val);
+			} else if ($t['union'] === false) {
+				foreach ($t['idlType'] as &$tt) {
+					self::setType($tt, $val);
+				}
+			}
+		}
+		return $t;
+	}
 }
 
 start = _ d:Definitions { return $d; }
@@ -33,7 +63,7 @@ eol = nl:("\n" / "\r\n" / "\r") { $this->lineNum++; return $nl; }
 
 /* WebIDL terminals */
 integer = m:opt_minus n:( decimal_integer / hex_integer / octal_integer ) {
-	return $m * $n;
+    return $m * $n;
 }
 
 opt_minus = "-" { return -1; } / "" { return 1; }
@@ -45,15 +75,16 @@ hex_integer = ("0x" / "0X" ) s:$( [0-9A-Fa-f]+ ) { return hexdec($s); }
 octal_integer = s:$( "0" [0-7]* ) { return octdec( $s ); }
 
 decimal = s:$( m:opt_minus (
-	( [0-9]+ "." [0-9]* / [0-9]* "." [0-9]+ ) ( [Ee] [+-]? [0-9]+ )? /
-	[0-9]+ [Ee] [+-]? [0-9]+
+    ( [0-9]+ "." [0-9]* / [0-9]* "." [0-9]+ ) ( [Ee] [+-]? [0-9]+ )?
+  /  [0-9]+ [Ee] [+-]? [0-9]+
 ) ) { return floatval( $s ); }
 
 identifier = !(ArgumentNameKeyword / BufferRelatedType / OtherIdLike)
-   s:$( [-_]? [A-Za-z] [-_0-9A-Za-z]* )
-   // weird special case reserved identifiers:
-   &{ return $s !== "_constructor" && $s !== "_toString" && $s !== "toString"; }
-   { return $s[0] == "_" ? substr($s, 1) : $s ; }
+    // weird special case reserved identifiers:
+    !( ( "_constructor" / "_toString" / "toString" ) i_ )
+    s:$( [-_]? [A-Za-z] [-_0-9A-Za-z]* ) {
+        return $s[0] == "_" ? substr($s, 1) : $s ;
+    }
 
 string = "\"" s:$([^\"]*) "\"" { return $s; }
 
@@ -62,60 +93,61 @@ whitespace = ( [\t ] / eol )+
 comment = "//" [^\n\r]* / "/*" ( [^\n\r*]+ / eol / "*" !"/" )* "*/"
 
 otherchar = !otherterminals ![()\[\]{},] [^\t\n\r 0-9A-Za-z]
-		   
+
 /* The 'ignore' production -- we have to include this after every
  * terminal not defined above */
 _ = ( whitespace / comment )*
 // this is used after "identifier-like" nonterminals
 i_ = ![-_0-9A-Za-z] _
-		   
+
 /* WebIDL non-terminals */
-Definitions = (e:ExtendedAttributeList d:Definition {
-	$d['extAttrs'] = $e;
-	return $d;
-})*
+Definitions = (
+    e:ExtendedAttributeList d:Definition {
+        $d['extAttrs'] = $e; return $d;
+    }
+)*
 
 Definition =
-		   CallbackOrInterfaceOrMixin
-		   / Namespace
-		   / Partial
-		   / Dictionary
-		   / Enum
-		   / Typedef
-		   / IncludesStatement
+    CallbackOrInterfaceOrMixin
+  / Namespace
+  / Partial
+  / Dictionary
+  / Enum
+  / Typedef
+  / IncludesStatement
 
-ArgumentNameKeyword =
- ( "async"
- / "attribute"
- / "callback"
- / "const"
- / "constructor"
- / "deleter"
- / "dictionary"
- / "enum"
- / "getter"
- / "includes"
- / "inherit"
- / "interface"
- / "iterable"
- / "maplike"
- / "mixin"
- / "namespace"
- / "partial"
- / "readonly"
- / "required"
- / "setlike"
- / "setter"
- / "static"
- / "stringifier"
- / "typedef"
- / "unrestricted" ) i_
+ArgumentNameKeyword = k:$(
+    "async"
+  / "attribute"
+  / "callback"
+  / "const" ![-_0-9A-Za-z] // prefix of another keyword!
+  / "constructor"
+  / "deleter"
+  / "dictionary"
+  / "enum"
+  / "getter"
+  / "includes"
+  / "inherit"
+  / "interface"
+  / "iterable"
+  / "maplike"
+  / "mixin"
+  / "namespace"
+  / "partial"
+  / "readonly"
+  / "required"
+  / "setlike"
+  / "setter"
+  / "static"
+  / "stringifier"
+  / "typedef"
+  / "unrestricted" ) i_ { return $k; }
 
 CallbackOrInterfaceOrMixin =
-   "callback" i_ CallbackRestOrInterface
- / "interface" i_ im:InterfaceOrMixin {
-   $im['type'] = "interface"; return $im;
- }
+    "callback" i_ c:CallbackRestOrInterface { return $c; }
+  / "interface" i_ im:InterfaceOrMixin {
+        $im['type'] = "interface"; return $im;
+  }
 InterfaceOrMixin = InterfaceRest / MixinRest
 InterfaceRest =
     name:identifier _ inh:Inheritance "{" _ m:InterfaceMembers "}" _ ";" _ {
@@ -126,23 +158,40 @@ InterfaceRest =
       'partial' => false,
     ];
 }
-Partial = "partial" i_ PartialDefinition
+Partial = "partial" i_ p:PartialDefinition {
+    $p['partial'] = true; return $p;
+}
 PartialDefinition =
-    "interface" i_ PartialInterfaceOrPartialMixin
+    "interface" i_ p:PartialInterfaceOrPartialMixin { return $p; }
   / PartialDictionary
   / Namespace
 PartialInterfaceOrPartialMixin =
     PartialInterfaceRest
   / MixinRest
 PartialInterfaceRest =
-	identifier _ "{" _ PartialInterfaceMembers "}" _ ";" _
-InterfaceMembers = ( ExtendedAttributeList InterfaceMember )*
+    name:identifier _ "{" _ m:PartialInterfaceMembers "}" _ ";" _ {
+    return [
+        'type' => 'interface',
+        'name' => $name,
+        'inheritance' => null,
+        'members' => $m,
+    ];
+}
+InterfaceMembers = (
+    e:ExtendedAttributeList m:InterfaceMember {
+      $m['extAttrs'] = $e; return $m;
+    }
+)*
 InterfaceMember =
-	PartialInterfaceMember
+    PartialInterfaceMember
   / Constructor
-PartialInterfaceMembers = ( ExtendedAttributeList PartialInterfaceMember )*
+PartialInterfaceMembers = (
+    e:ExtendedAttributeList m:PartialInterfaceMember {
+      $m['extAttrs'] = $e; return $m;
+    }
+)*
 PartialInterfaceMember =
-	Const
+    Const
   / Operation
   / Stringifier
   / StaticMember
@@ -156,91 +205,206 @@ PartialInterfaceMember =
 Inheritance =
     ( ":" _ name:identifier _ ) { return $name; }
   / "" { return null; }
-MixinRest = "mixin" i_ identifier _ "{" _ MixinMembers "}" _ ";" _
-MixinMembers = ( ExtendedAttributeList MixinMember )*
+MixinRest = "mixin" i_ name:identifier _ "{" _ m:MixinMembers "}" _ ";" _ {
+    return [
+        'type' => 'interface mixin',
+        'name' => $name,
+        'partial' => false,
+        'members' => $m,
+    ];
+}
+MixinMembers = (
+    e:ExtendedAttributeList m:MixinMember {
+      $m['extAttrs'] = $e; return $m;
+    }
+)*
 MixinMember =
-	Const
+    Const
   / RegularOperation
   / Stringifier
   / OptionalReadOnly AttributeRest
 
 IncludesStatement =
-   target:identifier _ "includes" i_ incl:identifier _ ";" _ {
+    target:identifier _ "includes" i_ incl:identifier _ ";" _ {
     return [
-       'type' => 'includes',
-       'target' => $target,
-       'includes' => $incl,
+        'type' => 'includes',
+        'target' => $target,
+        'includes' => $incl,
     ];
-   }
+}
 CallbackRestOrInterface =
-	CallbackRest
-  / "interface" i_ identifier _ "{" _ CallbackInterfaceMembers "}" _ ";" _
-CallbackInterfaceMembers = ( ExtendedAttributeList CallbackInterfaceMember )*
+    CallbackRest
+  / "interface" i_ name:identifier _ "{" _ m:CallbackInterfaceMembers "}" _ ";" _ {
+    return [
+        'type' => 'callback interface',
+        'name' => $name,
+        'inheritance' => null,
+        'members' => $m,
+        'partial' => false,
+    ];
+}
+CallbackInterfaceMembers = (
+    e:ExtendedAttributeList m:CallbackInterfaceMember {
+      $m['extAttrs'] = $e; return $m;
+    }
+)*
 CallbackInterfaceMember =
-	Const
+    Const
   / RegularOperation
 
-Const = "const" i_ ConstType identifier _ "=" _ ConstValue ";" _
+Const =
+    "const" i_ t:ConstType name:identifier _ "=" _ v:ConstValue ";" _ {
+    return [
+        'type' => 'const',
+        'idlType' => $t,
+        'name' => $name,
+        'value' => $v,
+    ];
+}
 ConstValue =
    BooleanLiteral
  / FloatLiteral
- / i:integer _ { return $i; }
-BooleanLiteral = "true" i_ { return true; } / "false" i_ { return false; }
-FloatLiteral = f:decimal _ { return $f; }
-	/ "-Infinity" i_ { return -INF; }
-	/ "Infinity" i_ { return INF; }
-	/ "NaN" i_ { return NAN; }
-ConstType = PrimitiveType
- / identifier _
+ / IntLiteral
+BooleanLiteral = v:(
+    "true" i_ { return true; }
+  / "false" i_ { return false; }
+) { return [ 'type' => 'boolean', 'value' => $v ]; }
+FloatLiteral =
+    s:$( decimal ) _ {
+        return [ 'type' => 'number', 'value' => $s ];
+    }
+  / "-Infinity" i_ {
+        return [ 'type' => 'Infinity', 'negative' => true ];
+    }
+  / "Infinity" i_ {
+        return [ 'type' => 'Infinity', 'negative' => false ];
+    }
+  / "NaN" i_ {
+        return [ 'type' => 'NaN' ];
+    }
+IntLiteral =
+    s:$( i:integer ) _ {
+        return [ 'type' => 'number', 'value' => $s ];
+    }
 
-ReadOnlyMember = "readonly" i_ ReadOnlyMemberRest
+ConstType =
+    t:PrimitiveType {
+        return [
+            'type' => 'const-type',
+            'extAttrs' => [],
+            'generic' => '',
+            'nullable' => false,
+            'union' => false,
+            'idlType' => $t,
+        ];
+    }
+  / i:identifier _ { return $i; } // XXX?
+
+ReadOnlyMember = "readonly" i_ m:ReadOnlyMemberRest {
+    $m['readonly'] = true; return $m;
+}
 ReadOnlyMemberRest =
-   AttributeRest
- / MaplikeRest
- / SetlikeRest
+    AttributeRest
+  / MaplikeRest
+  / SetlikeRest
 ReadWriteAttribute =
-   AttributeRest
+    AttributeRest
 InheritAttribute = "inherit" i_ AttributeRest
-AttributeRest = "attribute" i_ TypeWithExtendedAttributes AttributeName ";" _
+AttributeRest =
+    "attribute" i_ t:TypeWithExtendedAttributes name:AttributeName ";" _ {
+    return [
+        'type' => 'attribute',
+        'name' => $name,
+        'special' => '',
+        'readonly' => false,
+        'idlType' => self::setType($t, 'attribute-type'),
+    ];
+}
 AttributeName = AttributeNameKeyword
- / identifier _
-AttributeNameKeyword = ("async" / "required") i_
-OptionalReadOnly = ("readonly" i_)?
+ / id:identifier _ { return $id; }
+AttributeNameKeyword = id:$("async" / "required") i_ { return $id; }
+OptionalReadOnly = "readonly" i_ { return true; } / "" { return false; }
 DefaultValue =
    ConstValue
- / string _
- / "[" _ "]" _
- / "{" _ "}" _
- / "null" i_
+ / s:string _ { return [ 'type' => 'string', 'value' => $s ]; }
+ / "[" _ "]" _ { return [ 'type' => 'sequence', 'value' => [] ]; }
+ / "{" _ "}" _ { return [ 'type' => 'dictionary' ]; }
+ / "null" i_ { return [ 'type' => 'null' ]; }
 
 Operation =
    RegularOperation
  / SpecialOperation
-RegularOperation = Type OperationRest
-SpecialOperation = Special RegularOperation
-Special = "getter" i_
- / "setter" i_
- / "deleter" i_
-OperationRest = OptionalOperationName "(" _ ArgumentList ")" _ ";" _
+RegularOperation = t:Type o:OperationRest {
+    $o['idlType'] = self::setType($t, 'return-type');
+    return $o;
+}
+SpecialOperation = s:Special o:RegularOperation {
+    $o['special'] = $s; return $o;
+}
+Special = s:$(
+   "getter"
+ / "setter"
+ / "deleter" ) i_ { return $s; }
+OperationRest = name:OptionalOperationName "(" _ args:ArgumentList ")" _ ";" _ {
+    return [
+        'type' => 'operation',
+        'special' => '',
+        'idlType' => null,
+        'name' => $name,
+        'arguments' => $args,
+        'extAttrs' => null,
+    ];
+}
 OptionalOperationName = OperationName?
 OperationName =
    OperationNameKeyword
- / identifier _
-OperationNameKeyword = "includes" i_
+ / name:identifier _ { return $name; }
+OperationNameKeyword = s:"includes" i_ { return $s; }
 
-ArgumentList = Argument Arguments / ""
-Arguments = "," _ Argument Arguments / ""
-Argument = ExtendedAttributeList ArgumentRest
+ArgumentList =
+    a:Argument rest:Arguments { array_unshift($rest, $a); return $rest; }
+  / "" { return []; }
+Arguments =
+    "," _ a:Argument rest:Arguments { array_unshift($rest, $a); return $rest; }
+  / "" { return []; }
+Argument =
+    e:ExtendedAttributeList a:ArgumentRest {
+        $a['extAttrs'] = $e; return $a;
+    }
 ArgumentRest =
-   "optional" i_ TypeWithExtendedAttributes ArgumentName Default
- / Type Ellipsis ArgumentName
+    "optional" i_ t:TypeWithExtendedAttributes name:ArgumentName d:Default {
+      return [
+          'type' => 'argument',
+          'default' => $d,
+          'optional' => true,
+          'variadic' => false,
+          'idlType' => self::setType($t, 'argument-type'),
+          'name' => $name,
+      ];
+  }
+  / t:Type e:Ellipsis name:ArgumentName {
+      return [
+          'type' => 'argument',
+          'default' => null,
+          'optional' => false,
+          'variadic' => ($e !== null),
+          'idlType' => self::setType($t, 'argument-type'),
+          'name' => $name,
+      ];
+  }
 ArgumentName =
    ArgumentNameKeyword
- / identifier _
+ / name:identifier _ { return $name; }
 Ellipsis = ("..." _)?
 
 Constructor =
-   "constructor" i_ "(" _ ArgumentList ")" _ ";" _
+    "constructor" i_ "(" _ args:ArgumentList ")" _ ";" _ {
+      return [
+          'type' => 'constructor',
+          'arguments' => $args,
+      ];
+  }
+
 Stringifier =
    "stringifier" i_ StringifierRest
 StringifierRest =
@@ -252,109 +416,241 @@ StaticMemberRest =
    OptionalReadOnly AttributeRest
  / RegularOperation
 Iterable =
-   "iterable" i_ "<" _ TypeWithExtendedAttributes OptionalType ">" _ ";" _
-OptionalType = ( "," _ TypeWithExtendedAttributes )?
+   "iterable" i_ "<" _ t1:TypeWithExtendedAttributes t2:OptionalType ">" _ ";" _ {
+       return [
+           'type' => 'iterable',
+           'idlType' => $t2 ? [ $t1, $t2 ] : [ $t1 ],
+           'readonly' => false,
+           'async' => false,
+           'arguments' => [],
+       ];
+   }
+OptionalType = ( "," _ t:TypeWithExtendedAttributes { return $t; } )?
 AsyncIterable =
-   "async" i_ "iterable" i_ "<" _ TypeWithExtendedAttributes OptionalType ">" _ OptionalArgumentList ";" _
+   "async" i_ "iterable" i_ "<" _ t1:TypeWithExtendedAttributes t2:OptionalType ">" _ args:OptionalArgumentList ";" _ {
+       return [
+           'type' => 'iterable',
+           'idlType' => $t2 ? [ $t1, $t2 ] : [ $t1 ],
+           'readonly' => false,
+           'async' => true,
+           'arguments' => $args ?? [],
+       ];
+   }
 OptionalArgumentList =
-   "(" _ ArgumentList ")" _
- / ""
+   ( "(" _ args:ArgumentList ")" _ { return $args; } )?
+
 ReadWriteMaplike = MaplikeRest
 MaplikeRest =
-   "maplike" i_ "<" _ TypeWithExtendedAttributes "," _ TypeWithExtendedAttributes ">" _ ";" _
+   "maplike" i_ "<" _ t1:TypeWithExtendedAttributes "," _ t2:TypeWithExtendedAttributes ">" _ ";" _ {
+       return [
+           'type' => 'maplike',
+           'idlType' => [ $t1, $t2 ],
+           'readonly' => false,
+           'async' => false,
+           'arguments' => [],
+       ];
+   }
+
 ReadWriteSetlike = SetlikeRest
 SetlikeRest =
-   "setlike" i_ "<" _ TypeWithExtendedAttributes ">" _ ";" _
+   "setlike" i_ "<" _ t:TypeWithExtendedAttributes ">" _ ";" _ {
+       return [
+           'type' => 'setlike',
+           'idlType' => [ $t ],
+           'readonly' => false,
+           'async' => false,
+           'arguments' => [],
+       ];
+   }
 
 Namespace =
    "namespace" i_ name:identifier _ "{" _ m:NamespaceMembers "}" _ ";" _ {
    return [
       'type' => 'namespace',
       'name' => $name,
+      'inheritance' => null,
       'partial' => false,
       'members' => $m,
    ];
 }
-NamespaceMembers = ( ExtendedAttributeList NamespaceMember )*
+NamespaceMembers = (
+    e:ExtendedAttributeList m:NamespaceMember {
+      $m['extAttrs'] = $e; return $m;
+    }
+)*
 NamespaceMember =
    RegularOperation
- / "readonly" i_ AttributeRest
+ / "readonly" i_ a:AttributeRest { $a['readonly'] = true; return $a; }
 
 Dictionary =
-   "dictionary" i_ identifier _ Inheritance "{" _ DictionaryMembers "}" _ ";" _
+   "dictionary" i_ name:identifier _ inh:Inheritance "{" _ m:DictionaryMembers "}" _ ";" _ {
+       return [
+           'type' => 'dictionary',
+           'name' => $name,
+           'partial' => false,
+           'members' => $m,
+           'inheritance' => $inh,
+       ];
+   }
 DictionaryMembers = DictionaryMember*
-DictionaryMember = ExtendedAttributeList DictionaryMemberRest
+DictionaryMember = e:ExtendedAttributeList d:DictionaryMemberRest {
+    $d['extAttrs'] = $e; return $d;
+}
 DictionaryMemberRest =
-   "required" i_ TypeWithExtendedAttributes identifier _ ";" _
- / Type identifier _ Default ";" _
+    "required" i_ t:TypeWithExtendedAttributes name:identifier _ ";" _ {
+      return [
+          'type' => 'field',
+          'name' => $name,
+          'required' => true,
+          'idlType' => self::setType($t, 'dictionary-type'),
+          'default' => null,
+      ];
+    }
+  / t:Type name:identifier _ d:Default ";" _ {
+      return [
+          'type' => 'field',
+          'name' => $name,
+          'required' => false,
+          'idlType' => self::setType($t, 'dictionary-type'),
+          'default' => $d
+      ];
+  }
 PartialDictionary =
-   "dictionary" i_ identifier _ "{" _ DictionaryMembers "}" _ ";" _
-Default = ( "=" _ DefaultValue )?
-Enum = "enum" i_ identifier _ "{" _ EnumValueList "}" _ ";" _
-EnumValueList = string _ EnumValueListComma
-EnumValueListComma = ( "," _ EnumValueListString )?
-EnumValueListString = ( string _ EnumValueListComma )?
-CallbackRest = identifier _ "=" _ Type "(" _ ArgumentList ")" _ ";" _
-Typedef = "typedef" i_ TypeWithExtendedAttributes identifier _ ";" _
+    "dictionary" i_ name:identifier _ "{" _ m:DictionaryMembers "}" _ ";" _ {
+       return [
+           'type' => 'dictionary',
+           'name' => $name,
+           'partial' => true,
+           'members' => $m,
+           'inheritance' => null,
+       ];
+   }
+Default = ( "=" _ val:DefaultValue { return $val; } )?
+
+Enum = "enum" i_ name:identifier _ "{" _ vals:EnumValueList "}" _ ";" _ {
+    return [
+        'type' => 'enum',
+        'name' => $name,
+        'values' => $vals,
+    ];
+}
+EnumValueList = s:string _ vals:EnumValueListComma {
+    array_unshift($vals, [
+        'type' => 'enum-value',
+        'value' => $s,
+    ]);
+    return $vals;
+}
+EnumValueListComma =
+    "," _ vals:EnumValueListString { return $vals; }
+  / "" { return []; }
+EnumValueListString =
+    s:string _ vals:EnumValueListComma {
+    array_unshift($vals, [
+        'type' => 'enum-value',
+        'value' => $s,
+    ]);
+    return $vals;
+  }
+  / "" { return []; }
+
+CallbackRest = name:identifier _ "=" _ t:Type "(" _ args:ArgumentList ")" _ ";" _ {
+    return [
+        'type' => 'callback',
+         'name' => $name,
+         'idlType' => self::setType($t, 'return-type'),
+         'arguments' => $args,
+    ];
+}
+
+Typedef = "typedef" i_ t:TypeWithExtendedAttributes name:identifier _ ";" _ {
+    return [
+        'type' => 'typedef',
+         'name' => $name,
+         'idlType' => self::setType($t, 'typedef-type'),
+    ];
+}
 
 Type =
    SingleType
- / UnionType Null
+ / t:UnionType n:Null { $t['nullable'] = $n; return $t; }
 TypeWithExtendedAttributes =
-   ExtendedAttributeList Type
+    e:ExtendedAttributeList t:Type {
+        $t['extAttrs'] = $e; return $t;
+    }
 SingleType =
-   DistinguishableType
- / "any" i_
- / PromiseType
-UnionType = "(" _ UnionMemberType ("or" i_ UnionMemberType)+ ")" _
+    DistinguishableType
+  / "any" i_ {
+      return [ 'idlType' => 'any' ] + self::$basicType;
+  }
+  / PromiseType
+UnionType =
+    "(" _ t:UnionMemberType rest:("or" i_ t2:UnionMemberType { return $t2; })+ ")" _ {
+        array_unshift($rest, $t);
+        return [ 'idlType' => $rest, 'union' => true ] + self::$basicType;
+    }
 UnionMemberType =
-   ExtendedAttributeList DistinguishableType
- / UnionType Null
+    e:ExtendedAttributeList t:DistinguishableType {
+        $t['extAttrs'] = $e; return $t;
+    }
+  / t:UnionType n:Null {
+        $t['nullable'] = $n; return $t;
+    }
 
-DistinguishableType =
-   PrimitiveType Null
- / StringType Null
- / "sequence" i_ "<" _ TypeWithExtendedAttributes ">" _ Null
- / "object" i_ Null
- / "symbol" i_ Null
- / BufferRelatedType Null
- / "FrozenArray" i_ "<" _ TypeWithExtendedAttributes ">" _ Null
- / "ObservableArray" i_ "<" _ TypeWithExtendedAttributes ">" _ Null
- / RecordType Null
- / identifier _ Null
+DistinguishableType = dt:(
+    t:PrimitiveType {
+        return [ 'idlType' => $t ] + self::$basicType;
+    }
+  / t:StringType {
+        return [ 'idlType' => $t ] + self::$basicType;
+    }
+  / t:("object"/"symbol") i_ {
+        return [ 'idlType' => $t ] + self::$basicType;
+    }
+  / BufferRelatedType
+  / g:("sequence" / "FrozenArray" / "ObservableArray") i_ "<" _ t:TypeWithExtendedAttributes ">" _ {
+        return [ 'idlType' => [$t], 'generic' => $g ] + self::$basicType;
+    }
+  / RecordType
+  / t:identifier _ {
+      return [ 'idlType' => $t ] + self::$basicType;
+  }
+  ) n:Null { $dt['nullable'] = $n; return $dt; }
 PrimitiveType =
    UnsignedIntegerType
  / UnrestrictedFloatType
- / "undefined" i_
- / "boolean" i_
- / "byte" i_
- / "octet" i_
- / "bigint" i_
+ / v:$(
+   "undefined"
+ / "boolean"
+ / "byte"
+ / "octet"
+ / "bigint" ) i_ { return $v; }
 UnrestrictedFloatType =
-   "unrestricted" i_ FloatType
+   "unrestricted" i_ t:FloatType { return "unrestricted $t"; }
  / FloatType
-FloatType = ( "float" / "double" ) i_
+FloatType = v:$( "float" / "double" ) i_ { return $v; }
 UnsignedIntegerType =
-   "unsigned" i_ IntegerType
+   "unsigned" i_ t:IntegerType { return "unsigned $t"; }
  / IntegerType
 IntegerType =
-   "short" i_
- / "long" i_ OptionalLong
-OptionalLong = ( "long" i_ )?
+   s:$"short" i_ { return $s; }
+ / "long" i_ l:("long" i_)? { return $l ? "long long" : "long"; }
 
-StringType =
-   "ByteString" i_
- / "DOMString" i_
- / "USVString" i_
+StringType = s:$(
+   "ByteString"
+ / "DOMString"
+ / "USVString" ) i_ { return $s; }
 
 PromiseType =
-   "Promise" i_ "<" _ Type ">" _
+   "Promise" i_ "<" _ t:Type ">" _ {
+       return [ 'idlType' => [$t], 'generic' => 'Promise' ] + self::$basicType;
+   }
 RecordType =
    "record" i_ "<" _ StringType "," _ TypeWithExtendedAttributes ">" _
-Null = ("?" _)?
+Null = "?" _ { return true; } / "" { return false; }
 
-BufferRelatedType =
- ( "ArrayBuffer"
+BufferRelatedType = s:$(
+   "ArrayBuffer"
  / "DataView"
  / "Int8Array"
  / "Int16Array"
@@ -364,22 +660,29 @@ BufferRelatedType =
  / "Uint32Array"
  / "Uint8ClampedArray"
  / "Float32Array"
- / "Float64Array" ) i_
+ / "Float64Array" ) i_ { return $s; }
 
 ExtendedAttributeList =
-   "[" _ e:$ExtendedAttribute rest:ExtendedAttributes "]" _
+   "[" _ e:ExtendedAttribute rest:ExtendedAttributes "]" _
       { array_unshift($rest, $e); return $rest; }
  / !"[" "" { return []; }
 ExtendedAttributes =
-   "," _ e:$ExtendedAttribute rest:ExtendedAttributes
+   "," _ e:ExtendedAttribute rest:ExtendedAttributes
       { array_unshift($rest, $e); return $rest; }
  / "" { return []; }
 ExtendedAttribute =
+   ExtendedAttributeNoArgs
+ / ExtendedAttributeArgList
+ / ExtendedAttributeIdent
+ / ExtendedAttributeIdentList
+ / ExtendedAttributeNamedArgList
+ / $SpecCompliantExtendedAttribute // fall back to spec-compliant production
+SpecCompliantExtendedAttribute =
    "(" _ ExtendedAttributeInner ")" _ ExtendedAttributeRest
  / "[" _ ExtendedAttributeInner "]" _ ExtendedAttributeRest
  / "{" _ ExtendedAttributeInner "}" _ ExtendedAttributeRest
  / Other+ ExtendedAttributeRest
-ExtendedAttributeRest = ExtendedAttribute?
+ExtendedAttributeRest = SpecCompliantExtendedAttribute?
 ExtendedAttributeInner =
    "(" _ ExtendedAttributeInner ")" _ ExtendedAttributeInner
  / "[" _ ExtendedAttributeInner "]" _ ExtendedAttributeInner
@@ -440,10 +743,39 @@ otherterminals =
 OtherOrComma =
    Other
  / "," _
-IdentifierList = identifier _ Identifiers
-Identifiers = "," _ identifier _ Identifiers / ""
-ExtendedAttributeNoArgs = identifier _
-ExtendedAttributeArgList = identifier _ "(" _ ArgumentList ")" _
-ExtendedAttributeIdent = identifier _ "=" _ identifier _
-ExtendedAttributeIdentList = identifier _ "=" _ "(" _ IdentifierList ")" _
-ExtendedAttributeNamedArgList = identifier _ "=" _ identifier _ "(" _ ArgumentList ")" _
+
+ExtendedAttributeNoArgs = name:identifier _ ![(=] {
+    return [ 'name' => $name ] + self::$basicExtAttr;
+}
+ExtendedAttributeArgList = name:identifier _ "(" _ args:ArgumentList ")" _ {
+    return [ 'name' => $name, 'arguments' => $args ] + self::$basicExtAttr;
+}
+ExtendedAttributeIdent = name:identifier _ "=" _ rhs:identifier _ !"(" {
+    return [
+        'name' => $name,
+        'rhs' => [ 'type' => 'identifier', 'value' => $rhs ],
+    ] + self::$basicExtAttr;
+}
+ExtendedAttributeIdentList = name:identifier _ "=" _ "(" _ idl:IdentifierList ")" _ {
+    return [
+        'name' => $name,
+        'rhs' => [ 'type' => 'identifier-list', 'value' => $idl ],
+    ] + self::$basicExtAttr;
+}
+ExtendedAttributeNamedArgList = name:identifier _ "=" _ rhs:identifier _ "(" _ args:ArgumentList ")" _ {
+    return [
+        'name' => $name,
+        'arguments' => $args,
+        'rhs' => [ 'type' => 'identifier', 'value' => $rhs ],
+    ] + self::$basicExtAttr;
+}
+
+IdentifierList =
+    id:identifier _ rest:Identifiers {
+        array_unshift($rest, $id); return $rest;
+    }
+Identifiers =
+    "," _ id:identifier _ rest:Identifiers {
+        array_unshift($rest, $id); return $rest;
+    }
+  / "" { return []; }

@@ -19,10 +19,11 @@ class WebIDL {
 	public static function parse( string $webidl, array $options = [] ): array {
 		$ast = Grammar::load( $options['sourceName'] ?? "<unknown>", $webidl );
 		if ( $options['concrete'] ?? false ) {
+			$endsInNL = substr( $webidl, -1 ) === "\n";
 			$ast[] = [
 				'type' => 'eof',
 				'value' => '',
-				'trivia' => "\n",
+				'trivia' => $endsInNL ? "\n" : "",
 			];
 		}
 		return $ast;

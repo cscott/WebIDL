@@ -33,6 +33,75 @@ class WebIDLTest extends \PHPUnit\Framework\TestCase {
 	 * @dataProvider validTestsProvider
 	 */
 	public function testValidWebIDL( string $filename ) {
+		$goodlist = [
+			"allowany",
+			"argument-constructor",
+			"argument-extattrs",
+			"async-iterable",
+			"async-name",
+			"attributes",
+			"bigint",
+			"callback",
+			"constants",
+			"constructor",
+			"default",
+			"dictionary-inherits",
+			"dictionary",
+			"documentation-dos",
+			"documentation",
+			"enum",
+			"equivalent-decl",
+			"escaped-name",
+			"escaped-type",
+			// "extended-attributes",
+			"generic",
+			"getter-setter",
+			"identifier-hyphen",
+			"identifier-qualified-names",
+			"includes-name",
+			"indexed-properties",
+			// "inherits-getter",
+			"interface-inherits",
+			"iterable",
+			"maplike",
+			// "mixin",
+			"namedconstructor",
+			"namespace",
+			"nointerfaceobject",
+			"nullable",
+			"nullableobjects",
+			"obsolete-keywords",
+			"operation-optional-arg",
+			"overloading",
+			"overridebuiltins",
+			"partial-interface",
+			"primitives",
+			// "promise-void",
+			"prototyperoot",
+			"putforwards",
+			// "record",
+			//"reflector-interface",
+			"reg-operations",
+			"replaceable",
+			"sequence",
+			"setlike",
+			// "static",
+			//"stringifier-attribute",
+			//"stringifier-custom",
+			//"stringifier",
+			"treatasnull",
+			"treatasundefined",
+			"typedef-union",
+			"typedef",
+			"typesuffixes",
+			"undefined",
+			"uniontype",
+			"variadic-operations",
+		];
+		if ( !in_array( $filename, $goodlist, true ) ) {
+			$this->markTestSkipped( "AST construction not yet implemented" );
+			return;
+		}
 		$input = file_get_contents( __DIR__ . "/syntax/idl/" . $filename . ".webidl" );
 		$baseline = file_get_contents( __DIR__ . "/syntax/baseline/" . $filename . ".json" );
 		$actual = WebIDL::parse( $input, [
@@ -40,9 +109,6 @@ class WebIDLTest extends \PHPUnit\Framework\TestCase {
 			'concrete' => true,
 		] );
 		$expected = json_decode( $baseline, true );
-		if ( $filename !== "escaped-name" ) {
-			$this->markTestSkipped( "AST construction not yet implemented" );
-		}
 		$this->assertEquals( $expected, $actual );
 	}
 
