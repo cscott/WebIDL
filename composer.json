@@ -56,6 +56,7 @@
 			"minus-x fix .",
 			"phpcbf"
 		],
-		"phan": "phan --allow-polyfill-parser"
+		"phan": "phan --allow-polyfill-parser",
+		"wikipeg": "npm run wikipeg"
 	}
 }

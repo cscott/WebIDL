@@ -42,8 +42,23 @@ convert JavaScript objects to PHP associative arrays.
 
 ## Tests
 
+Test cases in `tests/invalid` and `tests/syntax` come from
+[`webidl2.js`](https://github.com/w3c/webidl2.js/tree/gh-pages/test).
+If ypu update them from upstream, please update the commit hash
+in `tests/WebIDLTest.php` as well.
+
 ```bash
 $ composer test
+```
+
+## Hacking
+The grammar is written using [wikipeg](wikipeg), a PEG parser generator
+that can output either JS or PHP code.  To regenerate the parser after
+changes are made to `Grammar.php`, run:
+
+```bash
+$ npm install # once, to install the JS version of wikipeg
+$ composer wikipeg
 ```
 
 ## License and Credits
