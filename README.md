@@ -97,3 +97,8 @@ The initial version of this code was written by C. Scott Ananian and is
 
 This code is distributed under the MIT license; see LICENSE for more
 info.
+
+Test cases used by this code were part of the
+[webidl2.js](https://github.com/w3c/webidl2.js) package, which is
+Copyright (c) 2014 Robin Berjon and also distributed under the MIT
+license.
