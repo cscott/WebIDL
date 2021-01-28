@@ -93,7 +93,7 @@ $ composer wikipeg
 ## License and Credits
 
 The initial version of this code was written by C. Scott Ananian and is
-(c) Copyright 2019 Wikimedia Foundation.
+Copyright (c) 2021 Wikimedia Foundation.
 
 This code is distributed under the MIT license; see LICENSE for more
 info.
