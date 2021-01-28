@@ -24,7 +24,7 @@ namespace Wikimedia\WebIDL;
 	}
 }
 
-start = _ Definitions
+start = _ d:Definitions { return $d; }
 
 /* Line number bookkeeping.
  * Be careful about backtracking after you successfully match this production.
@@ -53,7 +53,7 @@ identifier = !(ArgumentNameKeyword / BufferRelatedType / OtherIdLike)
    s:$( [-_]? [A-Za-z] [-_0-9A-Za-z]* )
    // weird special case reserved identifiers:
    &{ return $s !== "_constructor" && $s !== "_toString" && $s !== "toString"; }
-   { return $s; }
+   { return $s[0] == "_" ? substr($s, 1) : $s ; }
 
 string = "\"" s:$([^\"]*) "\"" { return $s; }
 
@@ -70,7 +70,10 @@ _ = ( whitespace / comment )*
 i_ = ![-_0-9A-Za-z] _
 		   
 /* WebIDL non-terminals */
-Definitions = (ExtendedAttributeList Definition)*
+Definitions = (e:ExtendedAttributeList d:Definition {
+	$d['extAttrs'] = $e;
+	return $d;
+})*
 
 Definition =
 		   CallbackOrInterfaceOrMixin
@@ -109,18 +112,27 @@ ArgumentNameKeyword =
  / "unrestricted" ) i_
 
 CallbackOrInterfaceOrMixin =
-	"callback" i_ CallbackRestOrInterface
-  / "interface" i_ InterfaceOrMixin
+   "callback" i_ CallbackRestOrInterface
+ / "interface" i_ im:InterfaceOrMixin {
+   $im['type'] = "interface"; return $im;
+ }
 InterfaceOrMixin = InterfaceRest / MixinRest
 InterfaceRest =
-    identifier _ Inheritance "{" _ InterfaceMembers "}" _ ";" _
+    name:identifier _ inh:Inheritance "{" _ m:InterfaceMembers "}" _ ";" _ {
+    return [
+      'name' => $name,
+      'inheritance' => $inh,
+      'members' => $m,
+      'partial' => false,
+    ];
+}
 Partial = "partial" i_ PartialDefinition
 PartialDefinition =
     "interface" i_ PartialInterfaceOrPartialMixin
   / PartialDictionary
   / Namespace
 PartialInterfaceOrPartialMixin =
-	PartialInterfaceRest
+    PartialInterfaceRest
   / MixinRest
 PartialInterfaceRest =
 	identifier _ "{" _ PartialInterfaceMembers "}" _ ";" _
@@ -141,7 +153,9 @@ PartialInterfaceMember =
   / ReadWriteMaplike
   / ReadWriteSetlike
   / InheritAttribute
-Inheritance = ( ":" _ identifier _ )?
+Inheritance =
+    ( ":" _ name:identifier _ ) { return $name; }
+  / "" { return null; }
 MixinRest = "mixin" i_ identifier _ "{" _ MixinMembers "}" _ ";" _
 MixinMembers = ( ExtendedAttributeList MixinMember )*
 MixinMember =
@@ -150,8 +164,14 @@ MixinMember =
   / Stringifier
   / OptionalReadOnly AttributeRest
 
-IncludesStatement = identifier _ "includes" i_ identifier _ ";" _
-		   
+IncludesStatement =
+   target:identifier _ "includes" i_ incl:identifier _ ";" _ {
+    return [
+       'type' => 'includes',
+       'target' => $target,
+       'includes' => $incl,
+    ];
+   }
 CallbackRestOrInterface =
 	CallbackRest
   / "interface" i_ identifier _ "{" _ CallbackInterfaceMembers "}" _ ";" _
@@ -247,7 +267,14 @@ SetlikeRest =
    "setlike" i_ "<" _ TypeWithExtendedAttributes ">" _ ";" _
 
 Namespace =
-   "namespace" i_ identifier _ "{" _ NamespaceMembers "}" _ ";" _
+   "namespace" i_ name:identifier _ "{" _ m:NamespaceMembers "}" _ ";" _ {
+   return [
+      'type' => 'namespace',
+      'name' => $name,
+      'partial' => false,
+      'members' => $m,
+   ];
+}
 NamespaceMembers = ( ExtendedAttributeList NamespaceMember )*
 NamespaceMember =
    RegularOperation
@@ -340,13 +367,18 @@ BufferRelatedType =
  / "Float64Array" ) i_
 
 ExtendedAttributeList =
-   "[" _ ExtendedAttribute ExtendedAttributes "]" _ / !"[" ""
-ExtendedAttributes = "," _ ExtendedAttribute ExtendedAttributes / ""
+   "[" _ e:$ExtendedAttribute rest:ExtendedAttributes "]" _
+      { array_unshift($rest, $e); return $rest; }
+ / !"[" "" { return []; }
+ExtendedAttributes =
+   "," _ e:$ExtendedAttribute rest:ExtendedAttributes
+      { array_unshift($rest, $e); return $rest; }
+ / "" { return []; }
 ExtendedAttribute =
    "(" _ ExtendedAttributeInner ")" _ ExtendedAttributeRest
  / "[" _ ExtendedAttributeInner "]" _ ExtendedAttributeRest
  / "{" _ ExtendedAttributeInner "}" _ ExtendedAttributeRest
- / Other ExtendedAttributeRest
+ / Other+ ExtendedAttributeRest
 ExtendedAttributeRest = ExtendedAttribute?
 ExtendedAttributeInner =
    "(" _ ExtendedAttributeInner ")" _ ExtendedAttributeInner

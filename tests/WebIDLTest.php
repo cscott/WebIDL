@@ -35,9 +35,14 @@ class WebIDLTest extends \PHPUnit\Framework\TestCase {
 	public function testValidWebIDL( string $filename ) {
 		$input = file_get_contents( __DIR__ . "/syntax/idl/" . $filename . ".webidl" );
 		$baseline = file_get_contents( __DIR__ . "/syntax/baseline/" . $filename . ".json" );
-		$actual = WebIDL::parse( $input, [ 'sourceName' => $filename . ".webidl" ] );
-		$expected = json_decode( $baseline );
-		$this->markTestSkipped( "AST construction not yet implemented" );
+		$actual = WebIDL::parse( $input, [
+			'sourceName' => $filename . ".webidl",
+			'concrete' => true,
+		] );
+		$expected = json_decode( $baseline, true );
+		if ( $filename !== "escaped-name" ) {
+			$this->markTestSkipped( "AST construction not yet implemented" );
+		}
 		$this->assertEquals( $expected, $actual );
 	}
 
